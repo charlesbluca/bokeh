@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 # Standard library imports
 import colorsys
+from math import sqrt
 
 # Bokeh imports
 from .color import Color
@@ -146,6 +147,13 @@ class RGB(Color):
 
         '''
         return self.copy()
+
+    @property
+    def brightness(self) -> float:
+        """ Perceived brightness of a color in [0, 1] range. """
+        # http://alienryderflex.com/hsp.html
+        r, g, b = self.r, self.g, self.b
+        return sqrt(0.299*r**2 + 0.587*g**2 + 0.114*b**2)/255
 
 #-----------------------------------------------------------------------------
 # Dev API
