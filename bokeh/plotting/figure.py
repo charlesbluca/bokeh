@@ -31,7 +31,7 @@ from ..core.properties import (
     String,
     Tuple,
 )
-from ..models import ColumnDataSource, GraphRenderer, Plot, Title, Tool
+from ..models import ColumnDataSource, CoordinateMapping, GraphRenderer, Plot, Range, Title, Tool
 from ..models.tools import Drag, InspectTool, Scroll, Tap
 from ..transform import linear_cmap
 from ..util.options import Options
@@ -175,6 +175,19 @@ class Figure(Plot, GlyphAPI):
         tool_objs, tool_map = process_tools_arg(self, opts.tools, opts.tooltips)
         self.add_tools(*tool_objs)
         process_active_tools(self.toolbar, tool_map, opts.active_drag, opts.active_inspect, opts.active_scroll, opts.active_tap)
+
+    @property
+    def plot(self):
+        return self
+
+    @property
+    def coordinates(self):
+        return None
+
+    def mapping(self, *, x_range: Range, y_range: Range, x_target: Range, y_target: Range) -> GlyphAPI:
+        """ Create a new sub-coordinate system and expose a plotting API. """
+        coordinates = CoordinateMapping(x_range=x_range, y_range=y_range, x_target=x_target, y_target=y_target)
+        return GlyphAPI(self, coordinates)
 
     def hexbin(self, x, y, size, orientation="pointytop", palette="Viridis256", line_color=None, fill_color=None, aspect_scale=1, **kwargs):
         ''' Perform a simple equal-weight hexagonal binning.

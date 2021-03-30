@@ -46,6 +46,7 @@ from ..core.validation.errors import (
     NO_SOURCE_FOR_GLYPH,
 )
 from ..model import Model
+from .canvas import CoordinateMapping
 from .glyphs import Circle, ConnectedXYGlyph, Glyph, MultiLine
 from .graphs import GraphHitTestPolicy, LayoutProvider, NodesOnly
 from .sources import CDSView, ColumnDataSource, DataSource, WebDataSource
@@ -85,6 +86,8 @@ class Renderer(Model):
     visible = Bool(default=True, help="""
     Is the renderer visible.
     """)
+
+    coordinates = Nullable(Instance(CoordinateMapping))
 
     x_range_name = String('default', help="""
     A particular (named) x-range to use for computing screen locations when
