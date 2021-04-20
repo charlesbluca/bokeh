@@ -22,10 +22,12 @@ dependencies:
   # docs
   - colorcet
   - pygments
-  - sphinx >=1.8
+  - sphinx >=3.5
   - sphinx-panels
   - pip
   - pip:
+    - autoclasstoc
+    - pydata_sphinx_theme
     - sphinxext-opengraph
     - sphinx-reredirects
 

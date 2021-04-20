@@ -47,7 +47,7 @@ Follow these steps to recreate the example from above:
 
         output_file("first_steps.html")
 
-        p = figure(x_range=(1,9), plot_width=500, plot_height=250)
+        p = figure(x_range=(1,9), width=500, height=250)
         points = p.circle(x=x, y=y, size=30, fill_color="#21a7df")
 
 3. Create a ``Div`` object and pass it some HTML code as a string:
@@ -225,12 +225,3 @@ the :bokeh-tree:`examples` directory in Bokeh's GitHub repository.
 Finally, on the `Bokeh community page <https://bokeh.org/community/>`_, you can
 find links and information about asking for help and contributing to Bokeh and
 the Bokeh community.
-
-.. panels::
-    :column: col-lg-12 col-md-12 col-sm-12 col-xs-12 p-2
-
-    ---
-    :card: + text-left
-    .. link-button:: first_steps_8.html
-        :text: Previous
-        :classes: stretched-link

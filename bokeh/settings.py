@@ -454,10 +454,10 @@ class Settings:
     browser = PrioritizedSetting("browser", "BOKEH_BROWSER", default=None, dev_default="none", help="""
     The default browser that Bokeh should use to show documents with.
 
-    Valid values are any of the browser names understood by the python
-    standard library webbrowser_ module.
+    Valid values are any of the predefined browser names understood by the
+    Python standard library webbrowser_ module.
 
-    .. _webbrowser: https://docs.python.org/2/library/webbrowser.html
+    .. _webbrowser: https://docs.python.org/3/library/webbrowser.html
     """)
 
     cdn_version = PrioritizedSetting("version", "BOKEH_CDN_VERSION", default=None, help="""
@@ -470,6 +470,11 @@ class Settings:
     Configure the ``cookie_secret`` setting in Tornado. This value is required
     if you use ``get_secure_cookie`` or ``set_secure_cookie``.  It should be a
     long, random sequence of bytes
+    """)
+
+    docs_alert = PrioritizedSetting("docs_alert", "BOKEH_DOCS_ALERT", default=None, help="""
+    Text for an alert banner to display when building the docs locally (for
+    testing the alert banner capability).
     """)
 
     docs_cdn = PrioritizedSetting("docs_cdn", "BOKEH_DOCS_CDN", default=None, help="""
