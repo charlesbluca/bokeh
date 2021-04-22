@@ -300,6 +300,16 @@ class TestColumnDataSource:
         with pytest.raises(ValueError, match=r"stream\(...\) only supports 1d sequences, got ndarray with size \(.*"):
             ds.stream(dict(a=[10], b=np.ones((1,1))))
 
+    def test_multi_stream_bad_data(self) -> None:
+        ds = bms.ColumnDataSource(data=dict(a=[[10]], b=[[20]]))
+        with pytest.raises(ValueError, match=r"Must stream updates to all existing columns \(extra: x\)"):
+            ds.multi_stream(dict(a=[[10]], b=[[10]], x=[[10]]))
+        with pytest.raises(ValueError, match=r"Must stream updates to all coordinates in column a"):
+            ds.multi_stream(dict(a=[[10], [20]], b=[[10]]))
+
+        with pytest.raises(ValueError, match=r"multi_stream\(...\) only supports 1d or 2d sequences, got ndarray with size \(.*"):
+            ds.multi_stream(dict(a=[[10]], b=np.ones((1,1,1))))
+
     def test__df_index_name_with_named_index(self, pd) -> None:
         df = pd.DataFrame(dict(a=[10], b=[20], c=[30])).set_index('c')
         assert bms.ColumnDataSource._df_index_name(df) == "c"
@@ -343,6 +353,21 @@ Lime,Green,99,$0.39
         assert stuff['args'] == ("doc", ds, dict(a=[11, 12], b=[21, 22]), "foo", mock_setter)
         assert stuff['kw'] == {}
 
+    def test__multi_stream_good_data(self) -> None:
+        ds = bms.ColumnDataSource(data=dict(a=[[10]], b=[[20]]))
+        ds._document = "doc"
+        stuff = {}
+        mock_setter = object()
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        # internal implementation of stream
+        ds._multi_stream(dict(a=[[11, 12]], b=[[21, 22]]), "foo", mock_setter)
+        assert stuff['args'] == ("doc", ds, dict(a=[[11, 12]], b=[[21, 22]]), "foo", mock_setter)
+        assert stuff['kw'] == {}
+
     def test_stream_good_data(self) -> None:
         ds = bms.ColumnDataSource(data=dict(a=[10], b=[20]))
         ds._document = "doc"
@@ -355,6 +380,20 @@ Lime,Green,99,$0.39
         # public implementation of stream
         ds._stream(dict(a=[11, 12], b=[21, 22]), "foo")
         assert stuff['args'] == ("doc", ds, dict(a=[11, 12], b=[21, 22]), "foo", None)
+        assert stuff['kw'] == {}
+
+    def test_multi_stream_good_data(self) -> None:
+        ds = bms.ColumnDataSource(data=dict(a=[[10]], b=[[20]]))
+        ds._document = "doc"
+        stuff = {}
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        # public implementation of stream
+        ds._multi_stream(dict(a=[[11, 12]], b=[[21, 22]]), "foo")
+        assert stuff['args'] == ("doc", ds, dict(a=[[11, 12]], b=[[21, 22]]), "foo", None)
         assert stuff['kw'] == {}
 
     def test__stream_good_datetime64_data(self) -> None:
@@ -374,6 +413,23 @@ Lime,Green,99,$0.39
         ds._stream(dict(index=new_date, b=[10]), "foo", mock_setter)
         assert np.array_equal(stuff['args'][2]['index'], new_date)
 
+    def test__multi_stream_good_datetime64_data(self) -> None:
+        now = dt.datetime.now()
+        dates = np.array([[now+dt.timedelta(i) for i in range(1, 10)]], dtype='datetime64')
+        ds = bms.ColumnDataSource(data=dict(index=dates, b=[list(range(1, 10))]))
+        ds._document = "doc"
+        stuff = {}
+        mock_setter = object()
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        # internal implementation of stream
+        new_date = np.array([[now+dt.timedelta(10)]], dtype='datetime64')
+        ds._multi_stream(dict(index=new_date, b=[[10]]), "foo", mock_setter)
+        assert np.array_equal(stuff['args'][2]['index'], new_date)
+
     def test__stream_good_datetime64_data_transformed(self) -> None:
         now = dt.datetime.now()
         dates = np.array([now+dt.timedelta(i) for i in range(1, 10)], dtype='datetime64')
@@ -390,6 +446,25 @@ Lime,Green,99,$0.39
         # internal implementation of stream
         new_date = np.array([now+dt.timedelta(10)], dtype='datetime64')
         ds._stream(dict(index=new_date, b=[10]), "foo", mock_setter)
+        transformed_date = convert_datetime_array(new_date)
+        assert np.array_equal(stuff['args'][2]['index'], transformed_date)
+
+    def test__multi_stream_good_datetime64_data_transformed(self) -> None:
+        now = dt.datetime.now()
+        dates = np.array([[now+dt.timedelta(i) for i in range(1, 10)]], dtype='datetime64')
+        dates = convert_datetime_array(dates)
+        ds = bms.ColumnDataSource(data=dict(index=dates, b=[list(range(1, 10))]))
+        ds._document = "doc"
+        stuff = {}
+        mock_setter = object()
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        # internal implementation of stream
+        new_date = np.array([[now+dt.timedelta(10)]], dtype='datetime64')
+        ds._multi_stream(dict(index=new_date, b=[[10]]), "foo", mock_setter)
         transformed_date = convert_datetime_array(new_date)
         assert np.array_equal(stuff['args'][2]['index'], transformed_date)
 
@@ -417,6 +492,30 @@ Lime,Green,99,$0.39
         assert np.array_equal(stuff['args'][2]['index'], new_df.index.values)
         assert np.array_equal(stuff['args'][2]['A'], new_df.A.values)
 
+    def test__multi_stream_good_df_with_date_index_data(self, pd) -> None:
+        df = pd.DataFrame(
+            index=pd.date_range('now', periods=1, freq='T'),
+            columns=['A'],
+            data=[[np.random.standard_normal(1)]]
+        )
+        ds = bms.ColumnDataSource(data=df)
+        ds._document = "doc"
+        stuff = {}
+        mock_setter = object()
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        new_df = pd.DataFrame(
+            index=df.index,
+            columns=df.columns,
+            data=[[np.random.standard_normal(1)]]
+        )
+        ds._multi_stream(new_df, "foo", mock_setter)
+        assert np.array_equal(stuff['args'][2]['index'], new_df.index.values)
+        assert np.array_equal(stuff['args'][2]['A'], new_df.A.values)
+
     def test__stream_good_dict_of_index_and_series_data(self, pd) -> None:
         df = pd.DataFrame(
             index=pd.date_range('now', periods=30, freq='T'),
@@ -438,6 +537,30 @@ Lime,Green,99,$0.39
             data=np.random.standard_normal(30)
         )
         ds._stream({'index': new_df.index, 'A': new_df.A}, "foo", mock_setter)
+        assert np.array_equal(stuff['args'][2]['index'], new_df.index.values)
+        assert np.array_equal(stuff['args'][2]['A'], new_df.A.values)
+
+    def test__multi_stream_good_dict_of_index_and_series_data(self, pd) -> None:
+        df = pd.DataFrame(
+            index=pd.date_range('now', periods=1, freq='T'),
+            columns=['A'],
+            data=[[np.random.standard_normal(1)]]
+        )
+        ds = bms.ColumnDataSource(data=df)
+        ds._document = "doc"
+        stuff = {}
+        mock_setter = object()
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        new_df = pd.DataFrame(
+            index=df.index,
+            columns=df.columns,
+            data=[[np.random.standard_normal(1)]]
+        )
+        ds._multi_stream({'index': new_df.index, 'A': new_df.A}, "foo", mock_setter)
         assert np.array_equal(stuff['args'][2]['index'], new_df.index.values)
         assert np.array_equal(stuff['args'][2]['A'], new_df.A.values)
 
@@ -463,6 +586,31 @@ Lime,Green,99,$0.39
             data=np.random.standard_normal(30)
         )
         ds._stream({'index': new_df.index, 'A': new_df.A}, "foo", mock_setter)
+        assert np.array_equal(stuff['args'][2]['index'], convert_datetime_array(new_df.index.values))
+        assert np.array_equal(stuff['args'][2]['A'], new_df.A.values)
+
+    def test__multi_stream_good_dict_of_index_and_series_data_transformed(self, pd) -> None:
+        df = pd.DataFrame(
+            index=pd.date_range('now', periods=1, freq='T'),
+            columns=['A'],
+            data=[[np.random.standard_normal(1)]]
+        )
+        ds = bms.ColumnDataSource(data={'index': convert_datetime_array(df.index.values),
+                                    'A': df.A})
+        ds._document = "doc"
+        stuff = {}
+        mock_setter = object()
+
+        def mock(*args, **kw):
+            stuff['args'] = args
+            stuff['kw'] = kw
+        ds.data._multi_stream = mock
+        new_df = pd.DataFrame(
+            index=df.index,
+            columns=df.columns,
+            data=[[np.random.standard_normal(1)]]
+        )
+        ds._multi_stream({'index': new_df.index, 'A': new_df.A}, "foo", mock_setter)
         assert np.array_equal(stuff['args'][2]['index'], convert_datetime_array(new_df.index.values))
         assert np.array_equal(stuff['args'][2]['A'], new_df.A.values)
 
@@ -523,6 +671,57 @@ Lime,Green,99,$0.39
                                                 b=np.array([20, 21, 22]),
                                                 c=np.array([30, 31, 32])))
 
+    def test_multi_stream_dict_to_ds_created_from_df(self, pd) -> None:
+        data = pd.DataFrame(dict(a=[[10]], b=[[20]], c=[[30]])).set_index('c')
+        ds = bms.ColumnDataSource(data)
+        ds._document = "doc"
+
+        notify_owners_stuff = {}
+
+        def notify_owners_mock(*args, **kw):
+            notify_owners_stuff['args'] = args
+            notify_owners_stuff['kw'] = kw
+        ds.data._notify_owners = notify_owners_mock
+
+        stream_stuff = {}
+        data_stream = ds.data._multi_stream
+
+        def stream_wrapper(*args, **kwargs):
+            stream_stuff['args'] = args
+            stream_stuff['kwargs'] = kwargs
+            data_stream(*args, **kwargs)
+        ds.data._multi_stream = stream_wrapper
+
+        ds._multi_stream(dict(a=[[11, 12]],
+                        b=np.array([[21, 22]]),
+                        c=pd.Series([31, 32])), 7)
+
+        assert len(stream_stuff['args']) == 5
+        expected_stream_args = ("doc", ds, dict(a=[[11, 12]],
+                                                b=np.array([[21, 22]]),
+                                                c=pd.Series([[31, 32]])), 7, None)
+        for i, (arg, ex_arg) in enumerate(zip(stream_stuff['args'],
+                                              expected_stream_args)):
+            if i == 2:
+                assert arg['a'] == ex_arg['a']
+                del arg['a'], ex_arg['a']
+                self._assert_equal_dicts_of_arrays(arg, ex_arg)
+            else:
+                assert arg == ex_arg
+
+        assert stream_stuff['kwargs'] == {}
+
+        assert len(notify_owners_stuff['args']) == 1
+        self._assert_equal_dicts_of_arrays(notify_owners_stuff['args'][0],
+                                           dict(a=np.array([[10]]),
+                                                b=np.array([[20]]),
+                                                c=np.array([[30]])))
+
+        self._assert_equal_dicts_of_arrays(dict(ds.data),
+                                           dict(a=np.array([[10, 11, 12]]),
+                                                b=np.array([[20, 21, 22]]),
+                                                c=np.array([[30, 31, 32]])))
+
     def test_stream_series_to_ds_created_from_df(self, pd) -> None:
         data = pd.DataFrame(dict(a=[10], b=[20], c=[30]))
         ds = bms.ColumnDataSource(data)
@@ -576,6 +775,59 @@ Lime,Green,99,$0.39
                                                 c=np.array([30, 31]),
                                                 index=np.array([0, 0])))
 
+    def test_multi_stream_series_to_ds_created_from_df(self, pd) -> None:
+        data = pd.DataFrame(dict(a=[[10]], b=[[20]], c=[[30]]))
+        ds = bms.ColumnDataSource(data)
+        ds._document = "doc"
+
+        notify_owners_stuff = {}
+
+        def notify_owners_mock(*args, **kw):
+            notify_owners_stuff['args'] = args
+            notify_owners_stuff['kw'] = kw
+
+        ds.data._notify_owners = notify_owners_mock
+
+        stream_stuff = {}
+        data_stream = ds.data._multi_stream
+
+        def stream_wrapper(*args, **kwargs):
+            stream_stuff['args'] = args
+            stream_stuff['kwargs'] = kwargs
+            data_stream(*args, **kwargs)
+
+        ds.data._multi_stream = stream_wrapper
+
+        ds._multi_stream(pd.Series([[11], [21], [31]], index=list('abc')), 7)
+
+        assert len(stream_stuff['args']) == 5
+        expected_df = pd.DataFrame(dict(a=np.array([[11]]),
+                                                b=np.array([[21]]),
+                                                c=np.array([[31]])))
+        expected_stream_data = expected_df.to_dict('series')
+        expected_stream_data['index'] = expected_df.index.values
+        expected_args = ("doc", ds, expected_stream_data, 7, None)
+        for i, (arg, ex_arg) in enumerate(zip(stream_stuff['args'], expected_args)):
+            if i == 2:
+                self._assert_equal_dicts_of_arrays(arg, ex_arg)
+            else:
+                assert arg == ex_arg
+
+        assert stream_stuff['kwargs'] == {}
+
+        assert len(notify_owners_stuff['args']) == 1
+        self._assert_equal_dicts_of_arrays(notify_owners_stuff['args'][0],
+                                           dict(a=np.array([[10]]),
+                                                b=np.array([[20]]),
+                                                c=np.array([[30]]),
+                                                index=np.array([0])))
+
+        self._assert_equal_dicts_of_arrays(dict(ds.data),
+                                           dict(a=np.array([[10, 11]]),
+                                                b=np.array([[20, 21]]),
+                                                c=np.array([[30, 31]]),
+                                                index=np.array([0])))
+
     def test_stream_df_to_ds_created_from_df_named_index(self, pd) -> None:
         data = pd.DataFrame(dict(a=[10], b=[20], c=[30])).set_index('c')
         ds = bms.ColumnDataSource(data)
@@ -628,6 +880,59 @@ Lime,Green,99,$0.39
                                            dict(a=np.array([10, 11, 12]),
                                                 b=np.array([20, 21, 22]),
                                                 c=np.array([30, 31, 32])))
+
+    def test_multi_stream_df_to_ds_created_from_df_named_index(self, pd) -> None:
+        data = pd.DataFrame(dict(a=[[10]], b=[[20]], c=[[30]])).set_index('c')
+        ds = bms.ColumnDataSource(data)
+        ds._document = "doc"
+
+        notify_owners_stuff = {}
+
+        def notify_owners_mock(*args, **kw):
+            notify_owners_stuff['args'] = args
+            notify_owners_stuff['kw'] = kw
+
+        ds.data._notify_owners = notify_owners_mock
+
+        stream_stuff = {}
+        data_stream = ds.data._multi_stream
+
+        def stream_wrapper(*args, **kwargs):
+            stream_stuff['args'] = args
+            stream_stuff['kwargs'] = kwargs
+            data_stream(*args, **kwargs)
+
+        ds.data._multi_stream = stream_wrapper
+
+        ds._multi_stream(pd.DataFrame(dict(a=[[11, 12]],
+                                     b=[[21, 22]],
+                                     c=[[31, 32]])).set_index('c'), 7)
+
+        assert len(stream_stuff['args']) == 5
+        expected_steam_data = dict(a=np.array([[11, 12]]),
+                                   b=np.array([[21, 22]]),
+                                   c=np.array([[31, 32]]))
+        expected_args = ("doc", ds, expected_steam_data, 7, None)
+        for i, (arg, ex_arg) in enumerate(zip(stream_stuff['args'], expected_args)):
+            if i == 2:
+                assert arg.keys() == ex_arg.keys()
+                for k, v in arg.items():
+                    assert np.array_equal(v, ex_arg[k])
+            else:
+                assert stream_stuff['args'][i] == expected_args[i]
+
+        assert stream_stuff['kwargs'] == {}
+
+        assert len(notify_owners_stuff['args']) == 1
+        self._assert_equal_dicts_of_arrays(notify_owners_stuff['args'][0],
+                                           dict(a=np.array([[10]]),
+                                                b=np.array([[20]]),
+                                                c=np.array([[30]])))
+
+        self._assert_equal_dicts_of_arrays(dict(ds.data),
+                                           dict(a=np.array([[10, 11, 12]]),
+                                                b=np.array([[20, 21, 22]]),
+                                                c=np.array([[30, 31, 32]])))
 
     def test_stream_df_to_ds_created_from_df_default_index(self, pd) -> None:
         data = pd.DataFrame(dict(a=[10], b=[20], c=[30]))
@@ -684,6 +989,62 @@ Lime,Green,99,$0.39
                                                 b=np.array([20, 21, 22]),
                                                 c=np.array([30, 31, 32]),
                                                 index=np.array([0, 0, 1])))
+
+    def test_multi_stream_df_to_ds_created_from_df_default_index(self, pd) -> None:
+        data = pd.DataFrame(dict(a=[[10]], b=[[20]], c=[[30]]))
+        ds = bms.ColumnDataSource(data)
+        ds._document = "doc"
+
+        notify_owners_stuff = {}
+
+        def notify_owners_mock(*args, **kw):
+            notify_owners_stuff['args'] = args
+            notify_owners_stuff['kw'] = kw
+
+        ds.data._notify_owners = notify_owners_mock
+
+        stream_stuff = {}
+        data_stream = ds.data._multi_stream
+
+        def stream_wrapper(*args, **kwargs):
+            stream_stuff['args'] = args
+            stream_stuff['kwargs'] = kwargs
+            data_stream(*args, **kwargs)
+
+        ds.data._multi_stream = stream_wrapper
+
+        ds._multi_stream(pd.DataFrame(dict(a=[[11, 12]],
+                                     b=[[21, 22]],
+                                     c=[[31, 32]])), 7)
+
+        assert len(stream_stuff['args']) == 5
+        expected_df = pd.DataFrame(dict(a=np.array([[11, 12]]),
+                                        b=np.array([[21, 22]]),
+                                        c=np.array([[31, 32]])))
+        expected_stream_data = expected_df.to_dict('series')
+        expected_stream_data['index'] = expected_df.index.values
+        expected_args = ("doc", ds, expected_stream_data, 7, None)
+        for i, (arg, ex_arg) in enumerate(zip(stream_stuff['args'], expected_args)):
+            if i == 2:
+                for k, v in arg.items():
+                    assert np.array_equal(v, ex_arg[k])
+            else:
+                assert stream_stuff['args'][i] == expected_args[i]
+
+        assert stream_stuff['kwargs'] == {}
+
+        assert len(notify_owners_stuff['args']) == 1
+        self._assert_equal_dicts_of_arrays(notify_owners_stuff['args'][0],
+                                           dict(a=np.array([[10]]),
+                                                b=np.array([[20]]),
+                                                c=np.array([[30]]),
+                                                index=np.array([0])))
+
+        self._assert_equal_dicts_of_arrays(dict(ds.data),
+                                           dict(a=np.array([[10, 11, 12]]),
+                                                b=np.array([[20, 21, 22]]),
+                                                c=np.array([[30, 31, 32]]),
+                                                index=np.array([0])))
 
     def test_patch_bad_columns(self) -> None:
         ds = bms.ColumnDataSource(data=dict(a=[10, 11], b=[20, 21]))
